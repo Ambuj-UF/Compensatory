@@ -274,7 +274,7 @@ def _thetaEK(records, optimize_dist):
     KIDERA = kidera()
     for i in range(len(msaObj[1])):
         posVector = msaObj[:, i:i+1]
-        print i
+        print(i)
         if len(set([str(x.seq) for x in posVector])) == 1:
             continue
         pairs = combinations(range(len(posVector)), 2)
@@ -332,22 +332,23 @@ def _poisson(distance, long):
 
     return pdist
 
+from sys import getsizeof
 
-def _poisson_dist(stringObj, pairObj2):
+def _poisson_dist(pairObj2):
     
     """Poisson distance"""
-
+    
     dist = 0
     gap = 0
-    seq1 = pairObj2[0].seq
-    seq2 = pairObj2[1].seq
+    seq1 = records[pairObj2[0] ].seq
+    seq2 = records[pairObj2[1] ].seq
     for i, amino in enumerate(seq1):
         if seq1[i] == seq2[i] and seq1[i] != '-' and seq2[i] != '-':
             dist = dist + 1
         if seq1[i] == '-' and seq2[i] == '-':
             gap = gap + 1
     #print dist, len(seq1), gap, seq1, "\n\n", seq2
-    return ((str(pairObj2[0].id) + "-" + str(pairObj2[1].id)), _poisson(dist, len(seq1) - gap))
+    return ((str(records[pairObj2[0] ].id) + "-" + str(records[pairObj2[1] ].id)), _poisson(dist, len(seq1) - gap))
 
 
 def _relative_distance(distance, max_dist):
@@ -380,36 +381,45 @@ def _optimize(records):
     from functools import partial
 
     n=multiprocessing.cpu_count()
-    print n
+    print(n)
     distance = dict()
     seqNameVec = list()
     testStore = dict()
     start = time.time()
-    pairs = list(combinations(records, 2))
+    pairs = list(combinations(range(0,len(records),1), 2))
+
+
     
     distance = dict()
-    pool = ThreadPool(n)
-    DistDict=pool.map(partial(_poisson_dist, "test"), pairs)
-    distance = {key: val for key, val in DistDict}
 
-    #for rec in records: # This for loop and the inner for loop makes N*(N-1) iterations where N is the number of sequences. This needs to be parallelized
-    #    testStore[rec.id] = "NA"
-    #    for inrec in records:
-    #        try:
-    #            testStore[inrec.id]
-    #            continue
-    #        except KeyError:
-    #            dObj = _poisson_dist("test", [rec, inrec])
-    #            if dObj == 0:
-    #                dObj = 0.01
-    #            distance[str(rec.id) + "-" + str(inrec.id)] = dObj
+    
+    
+    pool = ThreadPool(n)
+    mid = time.time()
+    DistDict=pool.imap(_poisson_dist, pairs)
+    distance = {key: val for key, val in DistDict}
+    
+
+    '''
+    for numrec1,rec in enumerate(records): # This for loop and the inner for loop makes N*(N-1) iterations where N is the number of sequences. This needs to be parallelized
+        testStore[rec.id] = "NA"
+        for numrec1,inrec in enumerate(records):
+            try:
+                testStore[inrec.id]
+                continue
+            except KeyError:
+                dObj = _poisson_dist([numrec1, numrec1])
+                if dObj == 0:
+                    dObj = 0.01
+                distance[str(rec.id) + "-" + str(inrec.id)] = dObj
+    '''
 
     finish = time.time()
-    print finish - start
+    print(finish - start)
     max_dist = find_max_dist(distance)
     optimize_dist = _relative_distance(distance, max_dist)
     return optimize_dist
-
+    
 
 
 ############################################## Correlation stuff ###########################################
@@ -453,27 +463,26 @@ def _correlation(Propkey, varDistVal, storeCorrel):
     
 ############################################################################################################
 
-def execute_coevol(filename, rCut=0.9):
+def execute_coevol(records, rCut=0.9):
 
-    records = list(SeqIO.parse(open(filename, "rU"), "fasta"))
-    #records = records
     if records == None:
         raise CoevolError("Empty input alignment dataset")
         
-    print "Calculating distance\n"
+    print("Calculating distance\n")
     optimize_dist = _optimize(records)
     posScore = _thetaEK(records, optimize_dist)
     meanDist = _meanTheta(posScore)
     varDist = _variability(posScore)
     storeCorrel = dict()
     for key, val in varDist.items():
-        print "Analyzing", key, "\n"
+        print("Analyzing", key, "\n")
         corScore = _correlation(key, val, storeCorrel)
         
     return corScore
 
+records = list(SeqIO.parse(open("ns1.fas", "rU"), "fasta"))
 
-output = execute_coevol("PF07714_rp15.txt")
+output = execute_coevol(records)
 
 #output = execute_coevol("ns1.fas")
 
@@ -489,3 +498,5 @@ with open("output.txt", "w") as fp:
 
 
 
+if(__name__=='__main__'):
+    execute_coevol()
